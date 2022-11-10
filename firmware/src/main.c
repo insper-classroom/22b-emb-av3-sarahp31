@@ -56,6 +56,12 @@ typedef struct {
 	uint value;
 } adcData;
 
+typedef struct {
+	uint red;
+	uint green;
+	uint blue;
+} colorRGB;
+
 /************************************************************************/
 /* handlers / callbacks                                                 */
 /************************************************************************/
@@ -87,11 +93,13 @@ static void task_afec(void *pvParameters){
 	RTT_init(1000, 100, RTT_MR_ALMIEN); // 10Hz e com alarme  no proprio RTT chama de novo;
 	
 	adcData adc;
+	uint valor;
 	
 	for(;;){
 		if( xQueueReceive(xQueueAFEC, &(adc), ( TickType_t ) 500 )){
-			printf("Recebeu algo do afec \n");
 			printf("AFEC = %d \n", adc.value);
+			valor = (adc.value * 255)/4095;
+			printf("valor corrigido = %d \n", valor);
 		}
 	}
 }
@@ -137,7 +145,27 @@ static void task_led(void *pvParameters) {
 /************************************************************************/
 
 void wheel( uint WheelPos, uint *r, uint *g, uint *b ) {
+	  WheelPos = 255 - WheelPos;
 
+	  if ( WheelPos < 85 ) {
+		  *r = 255 - WheelPos * 3;
+		  *g =  0;
+		  *b = WheelPos * 3;
+		  //setColor( 255 - WheelPos * 3, 0, WheelPos * 3 );
+		  } else if( WheelPos < 170 ) {
+		  WheelPos -= 85;
+		  *r = 0;
+		  *g =  WheelPos * 3;
+		  *b =  255 - WheelPos * 3;
+		  //setColor( 0, WheelPos * 3, 255 - WheelPos * 3 );
+		  } else {
+		  WheelPos -= 170;
+		  *r = WheelPos * 3;
+		  *g =  255 - WheelPos * 3;
+		  *b =  0;
+		  //setColor( WheelPos * 3, 255 - WheelPos * 3, 0 );
+	  }
+	  return *r, *g, *b;
 }
 
 static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,

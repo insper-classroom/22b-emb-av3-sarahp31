@@ -9,6 +9,10 @@
 #define ID_PIO_PWM_0 ID_PIOD
 #define MASK_PIN_PWM_0 (1 << 11)
 
+#define AFEC_POT AFEC0
+#define AFEC_POT_ID ID_AFEC0
+#define AFEC_POT_CHANNEL 0 // Canal do pino PD30
+
 /** RTOS  */
 #define TASK_OLED_STACK_SIZE                (1024*6/sizeof(portSTACK_TYPE))
 #define TASK_OLED_STACK_PRIORITY            (tskIDLE_PRIORITY)
@@ -42,12 +46,55 @@ extern void vApplicationMallocFailedHook(void) {
 }
 
 /************************************************************************/
+/* recursos RTOS                                                        */
+/************************************************************************/
+
+QueueHandle_t xQueueAFEC;
+QueueHandle_t xQueueRGB;
+
+typedef struct {
+	uint value;
+} adcData;
+
+/************************************************************************/
 /* handlers / callbacks                                                 */
 /************************************************************************/
+static void AFEC_pot_callback(void) {
+	adcData adc;
+	adc.value = afec_channel_get_value(AFEC_POT, AFEC_POT_CHANNEL);
+	BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+	xQueueSendFromISR(xQueueAFEC, &adc, &xHigherPriorityTaskWoken);
+}
+
+void RTT_Handler(void) {
+	uint32_t ul_status;
+	ul_status = rtt_get_status(RTT);
+
+	/* IRQ due to Alarm */
+	if ((ul_status & RTT_SR_ALMS) == RTT_SR_ALMS) {
+		afec_channel_enable(AFEC_POT, AFEC_POT_CHANNEL);
+		afec_start_software_conversion(AFEC_POT);
+		RTT_init(1000, 100, RTT_MR_ALMIEN);   //iniciando o RTT
+	}
+}
 
 /************************************************************************/
 /* TASKS                                                                */
 /************************************************************************/
+static void task_afec(void *pvParameters){
+	
+	config_AFEC_pot(AFEC_POT, AFEC_POT_ID, AFEC_POT_CHANNEL, AFEC_pot_callback);
+	RTT_init(1000, 100, RTT_MR_ALMIEN); // 10Hz e com alarme  no proprio RTT chama de novo;
+	
+	adcData adc;
+	
+	for(;;){
+		if( xQueueReceive(xQueueAFEC, &(adc), ( TickType_t ) 500 )){
+			printf("Recebeu algo do afec \n");
+			printf("AFEC = %d \n", adc.value);
+		}
+	}
+}
 
 static void task_led(void *pvParameters) {
 	
@@ -235,6 +282,14 @@ int main(void) {
 	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
 		printf("Failed to create task_led\r\n");
 	}
+	if (xTaskCreate(task_afec, "afec", TASK_OLED_STACK_SIZE, NULL,
+	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create task_afec\r\n");
+	}
+	
+	xQueueAFEC = xQueueCreate(64, sizeof(int) );
+	 if (xQueueAFEC == NULL)
+	 printf("falha em criar a fila \n");
 
 	/* Start the scheduler. */
 	vTaskStartScheduler();

@@ -5,6 +5,10 @@
 #include "gfx_mono_text.h"
 #include "sysfont.h"
 
+#define PIO_PWM_0 PIOD
+#define ID_PIO_PWM_0 ID_PIOD
+#define MASK_PIN_PWM_0 (1 << 11)
+
 /** RTOS  */
 #define TASK_OLED_STACK_SIZE                (1024*6/sizeof(portSTACK_TYPE))
 #define TASK_OLED_STACK_PRIORITY            (tskIDLE_PRIORITY)
@@ -46,9 +50,38 @@ extern void vApplicationMallocFailedHook(void) {
 /************************************************************************/
 
 static void task_led(void *pvParameters) {
-
+	
+	// PWM PARA O VERMELHO
+	pmc_enable_periph_clk(ID_PIO_PWM_0);
+	pio_set_peripheral(PIO_PWM_0, PIO_PERIPH_B, MASK_PIN_PWM_0 );
+	static pwm_channel_t pwm_channel_pin;
+	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pin, PWM_CHANNEL_0, 0);
+	
+	// PWM PARA O VERDE
+	pmc_enable_periph_clk(ID_PIOA);
+	pio_set_peripheral(PIOA, PIO_PERIPH_A, 1 << 2);
+	static pwm_channel_t pwm_channel_pa2;
+	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pa2, PWM_CHANNEL_1, 0);
+	
+	// PWM PARA O AZUL
+	pmc_enable_periph_clk(ID_PIOD);
+	pio_set_peripheral(PIOD, PIO_PERIPH_A, 1 << 22);
+	static pwm_channel_t pwm_channel_pa3;
+	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pa3, PWM_CHANNEL_2, 0);
+	
+	/* duty cycle */
+	int duty = 0;
+	
 	while (1) {
-
+		for(duty = 0; duty <= 255; duty++){
+			 pwm_channel_update_duty(PWM0, &pwm_channel_pa3, 255-duty);
+			 delay_ms(10);
+		}
+		/* fade out*/
+		for(duty = 0; duty <= 255; duty++){
+			pwm_channel_update_duty(PWM0, &pwm_channel_pa3, duty);
+			delay_ms(10);
+		}
 	}
 }
 

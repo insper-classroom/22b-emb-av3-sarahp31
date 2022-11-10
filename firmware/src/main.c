@@ -94,12 +94,29 @@ static void task_afec(void *pvParameters){
 	
 	adcData adc;
 	uint valor;
+	uint red;
+	uint green;
+	uint blue;
+	colorRGB rgb;
 	
 	for(;;){
 		if( xQueueReceive(xQueueAFEC, &(adc), ( TickType_t ) 500 )){
-			printf("AFEC = %d \n", adc.value);
+			//printf("AFEC = %d \n", adc.value);
 			valor = (adc.value * 255)/4095;
 			printf("valor corrigido = %d \n", valor);
+			//cob=nverte para RGB
+			wheel(valor, &red, &green, &blue);
+			
+			printf("RED: %d \n", red);
+			printf("GREEN: %d \n", green);
+			printf("BLUE: %d \n", blue);
+			
+			rgb.red = red;
+			rgb.green = green;
+			rgb.blue = blue;
+			
+			//enviando as cores
+			xQueueSend(xQueueRGB, &rgb,0);
 		}
 	}
 }
@@ -124,18 +141,13 @@ static void task_led(void *pvParameters) {
 	static pwm_channel_t pwm_channel_pa3;
 	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pa3, PWM_CHANNEL_2, 0);
 	
-	/* duty cycle */
-	int duty = 0;
-	
+	colorRGB rgb;
 	while (1) {
-		for(duty = 0; duty <= 255; duty++){
-			 pwm_channel_update_duty(PWM0, &pwm_channel_pa3, 255-duty);
-			 delay_ms(10);
-		}
-		/* fade out*/
-		for(duty = 0; duty <= 255; duty++){
-			pwm_channel_update_duty(PWM0, &pwm_channel_pa3, duty);
-			delay_ms(10);
+		
+		if( xQueueReceive(xQueueRGB, &(rgb), ( TickType_t ) 500 )){		
+			pwm_channel_update_duty(PWM0, &pwm_channel_pin, rgb.red);
+			pwm_channel_update_duty(PWM0, &pwm_channel_pa2, rgb.green);
+			pwm_channel_update_duty(PWM0, &pwm_channel_pa3, rgb.blue);
 		}
 	}
 }
@@ -143,29 +155,24 @@ static void task_led(void *pvParameters) {
 /************************************************************************/
 /* funcoes                                                              */
 /************************************************************************/
-
 void wheel( uint WheelPos, uint *r, uint *g, uint *b ) {
-	  WheelPos = 255 - WheelPos;
+	WheelPos = 255 - WheelPos;
 
-	  if ( WheelPos < 85 ) {
-		  *r = 255 - WheelPos * 3;
-		  *g =  0;
-		  *b = WheelPos * 3;
-		  //setColor( 255 - WheelPos * 3, 0, WheelPos * 3 );
-		  } else if( WheelPos < 170 ) {
-		  WheelPos -= 85;
-		  *r = 0;
-		  *g =  WheelPos * 3;
-		  *b =  255 - WheelPos * 3;
-		  //setColor( 0, WheelPos * 3, 255 - WheelPos * 3 );
-		  } else {
-		  WheelPos -= 170;
-		  *r = WheelPos * 3;
-		  *g =  255 - WheelPos * 3;
-		  *b =  0;
-		  //setColor( WheelPos * 3, 255 - WheelPos * 3, 0 );
-	  }
-	  return *r, *g, *b;
+	if ( WheelPos < 85 ) {
+		*r = 255 - WheelPos * 3;
+		*g =  0;
+		*b = WheelPos * 3;
+		} else if( WheelPos < 170 ) {
+		WheelPos -= 85;
+		*r = 0;
+		*g =  WheelPos * 3;
+		*b =  255 - WheelPos * 3;
+		} else {
+		WheelPos -= 170;
+		*r = WheelPos * 3;
+		*g =  255 - WheelPos * 3;
+		*b =  0;
+	}
 }
 
 static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,
@@ -318,7 +325,11 @@ int main(void) {
 	xQueueAFEC = xQueueCreate(64, sizeof(int) );
 	 if (xQueueAFEC == NULL)
 	 printf("falha em criar a fila \n");
-
+	 
+	 xQueueRGB = xQueueCreate(200, 3 * sizeof(int) );
+	 if (xQueueRGB == NULL)
+	 printf("falha em criar a fila \n");
+	 
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
